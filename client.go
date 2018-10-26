@@ -24,6 +24,7 @@ type MiPush struct {
 	packageName []string
 	host        string
 	appSecret   string
+	Token       string
 }
 
 func NewClient(appSecret string, packageName []string) *MiPush {
@@ -34,9 +35,8 @@ func NewClient(appSecret string, packageName []string) *MiPush {
 	}
 }
 
-func (m *MiPush) Send(ctx context.Context, msg *Message, regID string) (*SendResult, error) {
-	params := m.assembleSendParams(msg, regID)
-	bytes, err := m.doPost(ctx, m.host+RegURL, params)
+func (m *MiPush) Send(ctx context.Context, msg *Message) (*SendResult, error) {
+	bytes, err := m.doPost(ctx, m.host+RegURL, m.ToFormValues(msg))
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +119,7 @@ func (m *MiPush) doGet(ctx context.Context, url string, params string) ([]byte, 
 	return result, nil
 }
 
-func (m *MiPush) assembleSendParams(msg *Message, regID string) url.Values {
-	form := m.defaultForm(msg)
-	form.Add("registration_id", regID)
-	return form
-}
-
-func (m *MiPush) defaultForm(msg *Message) url.Values {
+func (m *MiPush) ToFormValues(msg *Message) url.Values {
 	form := url.Values{}
 	if len(m.packageName) > 0 {
 		form.Add("restricted_package_name", strings.Join(m.packageName, ","))
@@ -154,6 +148,9 @@ func (m *MiPush) defaultForm(msg *Message) url.Values {
 		for k, v := range msg.Extra {
 			form.Add("extra."+k, v)
 		}
+	}
+	if len(m.Token) > 0 {
+		form.Add("registration_id", m.Token)
 	}
 	return form
 }
