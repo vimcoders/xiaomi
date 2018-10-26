@@ -24,14 +24,15 @@ type MiPush struct {
 	packageName []string
 	host        string
 	appSecret   string
-	Token       string
+	token       string
 }
 
-func NewClient(appSecret string, packageName []string) *MiPush {
+func NewClient(appSecret string, packageName []string, token string) *MiPush {
 	return &MiPush{
 		packageName: packageName,
 		host:        ProductionHost,
 		appSecret:   appSecret,
+		token:       token,
 	}
 }
 
@@ -149,8 +150,8 @@ func (m *MiPush) ToFormValues(msg *Message) url.Values {
 			form.Add("extra."+k, v)
 		}
 	}
-	if len(m.Token) > 0 {
-		form.Add("registration_id", m.Token)
+	if len(m.token) > 0 {
+		form.Add("registration_id", m.token)
 	}
 	return form
 }
