@@ -14,6 +14,12 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 )
 
+const (
+	ProductionHost = "https://api.xmpush.xiaomi.com"
+	RegURL         = "/v3/message/regid"
+	PostRetryTimes = 3
+)
+
 type MiPush struct {
 	packageName []string
 	host        string
