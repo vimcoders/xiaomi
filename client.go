@@ -3,7 +3,6 @@ package xiaomi
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -15,9 +14,9 @@ import (
 )
 
 const (
-	ProductionHost = "https://api.xmpush.xiaomi.com"
-	RegURL         = "/v3/message/regid"
-	PostRetryTimes = 3
+	POST_RETRY_TIMES = 3
+	XIAOMI_REGID_URL = "/v3/message/regid"
+	XIAOMI_HOST_URL  = "https://api.xmpush.xiaomi.com"
 )
 
 type MiPush struct {
@@ -30,14 +29,14 @@ type MiPush struct {
 func NewClient(appSecret string, packageName []string, token string) *MiPush {
 	return &MiPush{
 		packageName: packageName,
-		host:        ProductionHost,
+		host:        XIAOMI_REGID_URL,
 		appSecret:   appSecret,
 		token:       token,
 	}
 }
 
 func (m *MiPush) Send(ctx context.Context, msg *Message) (*SendResult, error) {
-	bytes, err := m.doPost(ctx, m.host+RegURL, m.ToFormValues(msg))
+	bytes, err := m.doPost(ctx, m.host+XIAOMI_REGID_URL, m.ToFormValues(msg))
 	if err != nil {
 		return nil, err
 	}
@@ -49,75 +48,38 @@ func (m *MiPush) Send(ctx context.Context, msg *Message) (*SendResult, error) {
 	return &result, nil
 }
 
-func (m *MiPush) doPost(ctx context.Context, url string, form url.Values) ([]byte, error) {
-	var result []byte
-	var req *http.Request
-	var res *http.Response
-	var err error
-	req, err = http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+func (m *MiPush) doPost(ctx context.Context, url string, form url.Values) (bytes []byte, result error) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
 	req.Header.Set("Authorization", "key="+m.appSecret)
 	client := &http.Client{}
-	tryTime := 0
-tryAgain:
-	res, err = ctxhttp.Do(ctx, client, req)
-	if err != nil {
-		fmt.Println("xiaomi push post err:", err, tryTime)
-		select {
-		case <-ctx.Done():
+	for i := 0; i < POST_RETRY_TIMES; i++ {
+		res, err := ctxhttp.Do(ctx, client, req)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+			default:
+			}
+			result = err
+		}
+		if res.Body == nil {
+			panic("xiaomi response is nil")
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return nil, errors.New("network error")
+		}
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
 			return nil, err
-		default:
 		}
-		tryTime += 1
-		if tryTime < PostRetryTimes {
-			goto tryAgain
-		}
-		return nil, err
+		return body, nil
 	}
-	if res.Body == nil {
-		panic("xiaomi response is nil")
-	}
-	defer res.Body.Close()
-	fmt.Println("res.StatusCode=", res.StatusCode)
-	if res.StatusCode != http.StatusOK {
-		return nil, errors.New("network error")
-	}
-	result, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
 
-func (m *MiPush) doGet(ctx context.Context, url string, params string) ([]byte, error) {
-	var result []byte
-	var req *http.Request
-	var res *http.Response
-	var err error
-	req, err = http.NewRequest("GET", url+params, nil)
-	if err != nil {
-		panic(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-	req.Header.Set("Authorization", "key="+m.appSecret)
-
-	client := &http.Client{}
-	res, err = ctxhttp.Do(ctx, client, req)
-	if res.Body == nil {
-		panic("xiaomi response is nil")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, errors.New("network error")
-	}
-	result, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return
 }
 
 func (m *MiPush) ToFormValues(msg *Message) url.Values {

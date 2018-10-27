@@ -22,15 +22,25 @@ const (
 	MaxTimeToLive = time.Hour * 24 * 7 * 2
 )
 
-func NewAndroidMessage(title, description string) *Message {
+func NewAndroidMessage(title, description, payload string, delay int32) *Message {
+	var timeToSend int64
+
+	if delay < 0 {
+		delay = 0
+	}
+
+	if delay > 0 {
+		timeToSend = time.Now().Add(time.Duration(delay) * time.Second).Unix()
+	}
+
 	return &Message{
-		Payload:     "",
+		Payload:     payload,
 		Title:       title,
 		Description: description,
 		PassThrough: 0,
 		NotifyType:  -1,
 		TimeToLive:  0,
-		TimeToSend:  0,
+		TimeToSend:  timeToSend,
 		NotifyID:    0,
 		Extra:       make(map[string]string),
 	}
