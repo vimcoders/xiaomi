@@ -1,7 +1,6 @@
 package xiaomi
 
 import (
-	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -35,17 +34,19 @@ func NewClient(appSecret string, packageName []string, token string) *MiPush {
 	}
 }
 
-func (m *MiPush) Send(ctx context.Context, msg *Message) (*SendResult, error) {
-	bytes, err := m.doPost(ctx, m.host+XIAOMI_REGID_URL, m.ToFormValues(msg))
-	if err != nil {
-		return nil, err
+func (m *MiPush) Send(ctx context.Context, msg *Message) (string, error) {
+	for i := 0; i < POST_RETRY_TIMES; i++ {
+		bytes, err := m.doPost(ctx, m.host+XIAOMI_REGID_URL, m.ToFormValues(msg))
+		if err != nil {
+			if i+1 == POST_RETRY_TIMES {
+				return "", err
+			}
+			continue
+		}
+		return string(bytes), nil
 	}
-	var result SendResult
-	err = json.Unmarshal(bytes, &result)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+
+	return "", nil
 }
 
 func (m *MiPush) doPost(ctx context.Context, url string, form url.Values) (bytes []byte, result error) {
@@ -56,30 +57,25 @@ func (m *MiPush) doPost(ctx context.Context, url string, form url.Values) (bytes
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
 	req.Header.Set("Authorization", "key="+m.appSecret)
 	client := &http.Client{}
-	for i := 0; i < POST_RETRY_TIMES; i++ {
-		res, err := ctxhttp.Do(ctx, client, req)
-		if err != nil {
-			select {
-			case <-ctx.Done():
-			default:
-			}
-			result = err
+	res, err := ctxhttp.Do(ctx, client, req)
+	if err != nil {
+		select {
+		case <-ctx.Done():
+		default:
 		}
-		if res.Body == nil {
-			panic("xiaomi response is nil")
-		}
-		defer res.Body.Close()
-		if res.StatusCode != http.StatusOK {
-			return nil, errors.New("network error")
-		}
-		body, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return nil, err
-		}
-		return body, nil
 	}
-
-	return
+	if res.Body == nil {
+		panic("xiaomi response is nil")
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, errors.New("network error")
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 func (m *MiPush) ToFormValues(msg *Message) url.Values {
